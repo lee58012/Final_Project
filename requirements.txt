@@ -1,0 +1,15 @@
+streamlit>=1.35.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+langgraph>=0.2.0
+langgraph-checkpoint-sqlite>=2.0.0
+langchain-google-genai>=2.0.0
+langchain-mcp-adapters>=0.1.0
+mcp>=1.0.0
+aiosqlite>=0.20.0
+opendartreader>=0.2.0
+pandas>=2.0.0
+plotly>=5.20.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+yfinance>=0.2.40

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables & Secrets
+.env
+*.env.local
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project Caches & Data
+docs_cache/
+*.pkl
+data/*.db
+data/*.sqlite
+output/
+*.log
+
+# OS generated
+Thumbs.db
+Desktop.ini
+.DS_Store
