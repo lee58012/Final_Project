@@ -9,6 +9,13 @@ from mcp.server.fastmcp import FastMCP
 # 상위 폴더의 .env 로드
 BASE_DIR = Path(__file__).parent.parent.resolve()
 load_dotenv(BASE_DIR / ".env")
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+try:
+    from config import STOCK_ALIASES
+except Exception:
+    STOCK_ALIASES = {}
 
 mcp = FastMCP("dart-server")
 
@@ -45,6 +52,38 @@ def get_dart_client():
         os.chdir(orig_cwd)
     return _cached_dart
 
+def resolve_corp_name(corp_name_or_code: str) -> str:
+    """별칭/은어 및 종목명을 DART 정식 상장사 사명 또는 코드로 정규화"""
+    query = (corp_name_or_code or "").strip()
+    if not query:
+        return query
+
+    # 1. 6자리 종목코드인 경우 그대로 반환
+    if query.isdigit() and len(query) == 6:
+        return query
+
+    # 2. 은어/약어 사전 확인 (긴 문자열부터 매칭)
+    for alias, real_name in sorted(STOCK_ALIASES.items(), key=lambda x: len(x[0]), reverse=True):
+        if alias.lower() == query.lower() or alias == query:
+            return real_name
+
+    # 3. DART 상장사 목록에서 정확히 일치 또는 부분 일치 검색
+    try:
+        dart = get_dart_client()
+        if hasattr(dart, "corp_codes") and dart.corp_codes is not None:
+            df = dart.corp_codes[dart.corp_codes['stock_code'].str.len() == 6]
+            exact = df[df['corp_name'] == query]
+            if not exact.empty:
+                return exact['corp_name'].values[0]
+            if len(query) >= 2:
+                match = df[df['corp_name'].str.contains(query, regex=False)]
+                if not match.empty:
+                    return match['corp_name'].values[0]
+    except Exception:
+        pass
+
+    return query
+
 @mcp.tool("get_company_overview", description="기업명 또는 종목코드로 기업의 기본 정보(종목코드, 업종, 대표자, 설립일, 결산월 등)를 조회합니다.")
 def get_company_overview(corp_name_or_code: str) -> str:
     """
@@ -53,6 +92,7 @@ def get_company_overview(corp_name_or_code: str) -> str:
     Args:
         corp_name_or_code: 회사명(예: '삼성전자', 'SK하이닉스') 또는 6자리 종목코드(예: '005930')
     """
+    corp_name_or_code = resolve_corp_name(corp_name_or_code)
     with contextlib.redirect_stdout(sys.stderr):
         try:
             dart = get_dart_client()
@@ -86,6 +126,7 @@ def get_financial_statements(corp_name_or_code: str, year: int = 2025) -> str:
         corp_name_or_code: 회사명 또는 종목코드
         year: 조회 기준 사업연도 (기본값: 2025. 2025년 사업보고서 기준 2023~2025년 3개년 실적 조회)
     """
+    corp_name_or_code = resolve_corp_name(corp_name_or_code)
     with contextlib.redirect_stdout(sys.stderr):
         try:
             import re
@@ -156,6 +197,7 @@ def get_recent_disclosures(corp_name_or_code: str, count: int = 5, days: int = 7
         count: 조회할 공시 개수 (기본 5건, 최대 10건)
         days: 최근 기준 일수 (기본 7일)
     """
+    corp_name_or_code = resolve_corp_name(corp_name_or_code)
     with contextlib.redirect_stdout(sys.stderr):
         try:
             from datetime import datetime, timedelta
