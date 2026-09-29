@@ -9,7 +9,8 @@ st.set_page_config(
 
 # 페이지 라우팅
 index_page = st.Page("pages/index_page.py", title="홈 / 불곰 소개", icon="🏠")
-chat_page = st.Page("pages/chat_page.py", title="투자 분석가", icon="📊")
+chat_page = st.Page("pages/chat_page.py", title="투자 분석하기", icon="💬")
+report_page = st.Page("pages/report_page.py", title="보고서 관리", icon="📑")
 
-pg = st.navigation([index_page, chat_page])
+pg = st.navigation([index_page, chat_page, report_page])
 pg.run()

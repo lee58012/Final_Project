@@ -232,6 +232,25 @@ def add_message(session_id: str, user_id: str, role: str, content: str, metadata
         )
         conn.commit()
 
+def delete_last_message(session_id: str) -> None:
+    """특정 세션의 가장 최근 메시지 1건 삭제 (답변 생성 중단 시 이전 질문 롤백용)"""
+    init_db()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM messages
+            WHERE id = (
+                SELECT id FROM messages
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+            )
+            """,
+            (session_id,)
+        )
+        conn.commit()
+
 if __name__ == "__main__":
     init_db(force=True)
     print("✅ 데이터베이스가 성공적으로 초기화 및 인덱싱되었습니다:", DB_PATH)
