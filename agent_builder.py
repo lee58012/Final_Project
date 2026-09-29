@@ -140,7 +140,6 @@ def node_fetch_context(state: CommitteeState) -> Dict[str, Any]:
     # 3. 최근 공시 목록 (DART, 최근 7일 이내 우선 필터링)
     disc_text = get_recent_disclosures(ticker, count=5, days=7)
 
-    # 4. 최근 주요 시장 뉴스 요약 (Yahoo Finance)
     # 4. 최근 주요 시장 뉴스 요약 (Yahoo Finance, 7일 이내 시점 태깅)
     yahoo_news_text = get_yahoo_news_summary(ticker, count=5)
 

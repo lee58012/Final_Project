@@ -325,7 +325,6 @@ class TestYahooFinanceTools(unittest.TestCase):
 
     def test_04_get_yahoo_news_summary_samsung(self):
         res = get_yahoo_news_summary("삼성전자", count=3)
-        self.assertIn("Yahoo Finance 최신 뉴스 요약", res)
         self.assertIn("Yahoo Finance 최신 시장 뉴스 요약", res)
         self.assertIn("005930.KS", res)
         # 뉴스 항목 또는 링크 존재 확인
@@ -333,7 +332,6 @@ class TestYahooFinanceTools(unittest.TestCase):
 
     def test_05_get_yahoo_news_summary_us(self):
         res = get_yahoo_news_summary("AAPL", count=2)
-        self.assertIn("Yahoo Finance 최신 뉴스 요약", res)
         self.assertIn("Yahoo Finance 최신 시장 뉴스 요약", res)
         self.assertIn("AAPL", res)
 

@@ -3,10 +3,7 @@ import sys
 import contextlib
 from pathlib import Path
 from dotenv import load_dotenv
-try:
-    import OpenDartReader
-except ImportError:
-    from opendartreader import OpenDartReader
+import OpenDartReader
 from mcp.server.fastmcp import FastMCP
 
 # 상위 폴더의 .env 로드
@@ -165,36 +162,16 @@ def get_recent_disclosures(corp_name_or_code: str, count: int = 5, days: int = 7
             dart = get_dart_client()
             count = min(max(1, count), 10)
             
-            # 최근 공시 조회 (최근 90일 우선 조회하여 수천 건 전체 페이징 병목 방지)
-            start_date = (datetime.today() - timedelta(days=90)).strftime('%Y-%m-%d')
-            disc = dart.list(corp_name_or_code, start=start_date)
-            if disc is None or (hasattr(disc, "empty") and disc.empty):
-                start_date = (datetime.today() - timedelta(days=365)).strftime('%Y-%m-%d')
-                disc = dart.list(corp_name_or_code, start=start_date)
             today = datetime.today()
             today_str = today.strftime('%Y-%m-%d')
             start_7d = (today - timedelta(days=days)).strftime('%Y-%m-%d')
 
-            if disc is None or (hasattr(disc, "empty") and disc.empty):
-                return f"'{corp_name_or_code}'의 최근 공시 내역이 없습니다."
-            
-            items = disc.head(count)
-            results = [f"[최근 주요 공시 목록 ({corp_name_or_code}, 최신 {count}건)]"]
-            
-            for _, row in items.iterrows():
-                rcept_dt = row.get('rcept_dt', '-')
-                report_nm = row.get('report_nm', '-')
-                flr_nm = row.get('flr_nm', '-')
-                rcept_no = row.get('rcept_no', '')
-                link = f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcept_no}" if rcept_no else ""
-                results.append(f"- [{rcept_dt}] {report_nm} (제출인: {flr_nm}) \n  링크: {link}")
-                
             # 1. 최근 7일(1주일) 이내 신규 공시 우선 조회
             disc_7d = dart.list(corp_name_or_code, start=start_7d)
             if disc_7d is not None and not disc_7d.empty:
                 items = disc_7d.head(count)
                 results = [
-                    f"[DART 최근 7일(1주일) 이내 신규 공시 ({corp_name_or_code}, 기간: {start_7d} ~ {today_str}, 총 {len(disc_7d)}건 중 {len(items)}건)]"
+                    f"[DART 최근 주요 공시 (최근 7일 신규 접수 | {corp_name_or_code}, 기간: {start_7d} ~ {today_str}, 총 {len(disc_7d)}건 중 {len(items)}건)]"
                 ]
                 for _, row in items.iterrows():
                     rcept_dt = str(row.get('rcept_dt', '-'))
