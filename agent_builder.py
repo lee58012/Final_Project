@@ -32,7 +32,7 @@ from mcp_server.yahoo_server import (
     get_yahoo_news_summary,
     get_yahoo_market_snapshot
 )
-from mcp_server.file_server import write_markdown
+from mcp_server.file_server import write_pdf
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
@@ -291,13 +291,13 @@ def node_compile_report(state: CommitteeState) -> Dict[str, Any]:
 
     final_report = "\n".join(report_parts)
 
-    # 마크다운 보고서 자동 저장
+    # PDF 투자 심의 보고서 자동 생성 및 저장
     clean_ticker = re.sub(r"[^\w]", "_", ticker)
-    filename = f"{clean_ticker}_가상투자심의보고서.md"
+    filename = f"{clean_ticker}_가상투자심의보고서.pdf"
     try:
-        write_markdown(filename, final_report, session_id=thread_id)
+        write_pdf(filename, final_report, session_id=thread_id)
     except Exception as e:
-        print(f"[Warning] 보고서 파일 저장 실패: {e}")
+        print(f"[Warning] PDF 보고서 파일 저장 실패: {e}")
 
     return {"final_report": final_report}
 

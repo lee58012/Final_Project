@@ -394,12 +394,12 @@ def render_chat_page():
 
         st.rerun()
 
-    # 4. 하단: 현재 심의 및 이전 투자 심의 보고서 다운로드 섹션
+    # 4. 하단: 현재 심의 및 이전 투자 심의 보고서 (PDF 전용)
     current_session_dir = OUTPUT_DIR / thread_id
     current_files = []
     if current_session_dir.exists():
         current_files = sorted(
-            list(current_session_dir.glob("*.md")),
+            list(current_session_dir.glob("*.pdf")),
             key=lambda p: p.stat().st_mtime,
             reverse=True
         )
@@ -409,49 +409,35 @@ def render_chat_page():
     with st.expander(f"📁 현재 심의 투자 보고서 ({len(current_files)}건)", expanded=bool(current_files)):
         if current_files:
             for sf in current_files:
-                cols = st.columns([2.5, 1, 1, 0.8])
+                cols = st.columns([3, 1.2, 0.8])
                 with cols[0]:
-                    st.markdown(f"📄 **{sf.name}**")
-                    st.caption(f"크기: {sf.stat().st_size:,} bytes")
+                    st.markdown(f"📑 **{sf.name}**")
+                    st.caption(f"형식: PDF 문서 | 크기: {sf.stat().st_size:,} bytes")
                 
-                with open(sf, "r", encoding="utf-8") as f:
-                    md_text = f.read()
+                with open(sf, "rb") as f:
+                    pdf_bytes = f.read()
 
                 with cols[1]:
                     st.download_button(
-                        label="📥 MD",
-                        data=md_text,
+                        label="📥 PDF 다운로드",
+                        data=pdf_bytes,
                         file_name=sf.name,
-                        mime="text/markdown",
-                        key=f"down_md_{thread_id}_{sf.name}",
+                        mime="application/pdf",
+                        key=f"down_pdf_{thread_id}_{sf.name}",
                         use_container_width=True
                     )
                 with cols[2]:
-                    try:
-                        pdf_bytes = markdown_to_pdf_bytes(md_text)
-                        pdf_name = sf.stem + ".pdf"
-                        st.download_button(
-                            label="📑 PDF",
-                            data=pdf_bytes,
-                            file_name=pdf_name,
-                            mime="application/pdf",
-                            key=f"down_pdf_{thread_id}_{sf.name}",
-                            use_container_width=True
-                        )
-                    except Exception as e:
-                        st.caption("PDF 변환 불가")
-                with cols[3]:
                     if st.button("🗑️ 삭제", key=f"del_{thread_id}_{sf.name}", use_container_width=True):
                         sf.unlink(missing_ok=True)
                         st.toast(f"'{sf.name}' 보고서가 삭제되었습니다.", icon="🗑️")
                         st.rerun()
         else:
-            st.caption("현재 심의에서 생성된 보고서 파일이 없습니다. (AI에게 '투자 심의 보고서로 저장해줘'라고 요청해보세요.)")
+            st.caption("현재 심의에서 생성된 PDF 보고서가 없습니다. (기업 분석 질문 시 자동으로 고품질 PDF 보고서가 생성됩니다.)")
 
     # B. 다른 심의 보고서 목록
     all_other_files = []
     if OUTPUT_DIR.exists():
-        for p in OUTPUT_DIR.rglob("*.md"):
+        for p in OUTPUT_DIR.rglob("*.pdf"):
             if current_session_dir.exists() and p.is_relative_to(current_session_dir):
                 continue
             all_other_files.append(p)
@@ -460,41 +446,29 @@ def render_chat_page():
         with st.expander(f"🗂️ 다른 심의 보고서 목록 ({len(all_other_files)}건)"):
             for sf in sorted(all_other_files, key=lambda p: p.stat().st_mtime, reverse=True):
                 group_name = sf.parent.name if sf.parent != OUTPUT_DIR else "기타"
-                cols = st.columns([2.5, 1, 1, 0.8])
+                cols = st.columns([3, 1.2, 0.8])
                 with cols[0]:
-                    st.markdown(f"📄 **{sf.name}**  *(심의: `{group_name[:8]}...`)*" if len(group_name) > 8 else f"📄 **{sf.name}**  *(심의: `{group_name}`)*")
-                
-                with open(sf, "r", encoding="utf-8") as f:
-                    md_text = f.read()
+                    st.markdown(f"📑 **{sf.name}**  *(심의: `{group_name[:8]}...`)*" if len(group_name) > 8 else f"📑 **{sf.name}**  *(심의: `{group_name}`)*")
+                    st.caption(f"형식: PDF 문서 | 크기: {sf.stat().st_size:,} bytes")
+
+                with open(sf, "rb") as f:
+                    pdf_bytes = f.read()
 
                 with cols[1]:
                     st.download_button(
-                        label="📥 MD",
-                        data=md_text,
+                        label="📥 PDF 다운로드",
+                        data=pdf_bytes,
                         file_name=sf.name,
-                        mime="text/markdown",
-                        key=f"down_other_md_{group_name}_{sf.name}",
+                        mime="application/pdf",
+                        key=f"down_other_pdf_{group_name}_{sf.name}",
                         use_container_width=True
                     )
                 with cols[2]:
-                    try:
-                        pdf_bytes = markdown_to_pdf_bytes(md_text)
-                        pdf_name = sf.stem + ".pdf"
-                        st.download_button(
-                            label="📑 PDF",
-                            data=pdf_bytes,
-                            file_name=pdf_name,
-                            mime="application/pdf",
-                            key=f"down_other_pdf_{group_name}_{sf.name}",
-                            use_container_width=True
-                        )
-                    except Exception as e:
-                        st.caption("PDF 변환 불가")
-                with cols[3]:
                     if st.button("🗑️ 삭제", key=f"del_other_{group_name}_{sf.name}", use_container_width=True):
                         sf.unlink(missing_ok=True)
                         st.toast(f"'{sf.name}' 보고서가 삭제되었습니다.", icon="🗑️")
                         st.rerun()
 
 render_chat_page()
+
 
