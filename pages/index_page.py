@@ -4,11 +4,11 @@ from config import GEMINI_API_KEY, DART_API_KEY
 def render_index_page():
     st.markdown("""
         <div style='text-align: center; padding: 2rem 0;'>
-            <h1 style='color: #1E3A8A; margin-bottom: 0.5rem;'>🏛️ 가상 헤지펀드 투자 심의 위원회</h1>
-            <h3 style='color: #2563EB; font-weight: 500; margin-top: 0;'>Global Hedge Fund AI Investment Committee</h3>
+            <h1 style='color: #1E3A8A; margin-bottom: 0.5rem;'>🐂 불곰 (Bull-Gom) : AI 투자 분석가 🐻</h1>
+            <h3 style='color: #2563EB; font-weight: 500; margin-top: 0;'>상승론자(Bull)와 하락론자(Bear/곰)의 찬반 격돌 & 리스크 검증 시스템</h3>
             <p style='color: #4B5563; font-size: 1.15rem; max-width: 800px; margin: 0 auto;'>
-                상승론자(Bull), 하락론자(Bear), 그리고 최고리스크관리자(CRO)의 치열한 교차 검증을 통해<br>
-                금융감독원 DART 공시 팩트에 기반한 객관적인 최종 투자 판단 보고서를 제공합니다.
+                단일 AI의 확증 편향을 깨기 위해, <b>황소(Bull)</b>의 강력한 성장 모멘텀 발굴과 <b>곰(Bear)</b>의 냉혹한 숏 관점 반박을 교차 검증하여<br>
+                최고위험관리자(CRO)가 객관적이고 균형 잡힌 최종 투자 판단 및 PDF 보고서를 제공합니다.
             </p>
         </div>
     """, unsafe_allow_html=True)
