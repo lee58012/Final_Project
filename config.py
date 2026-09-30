@@ -19,7 +19,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # 3. API 키 및 모델 설정
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 DART_API_KEY = os.getenv("DART_API_KEY", "").strip()
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.6-flash")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.8-flash")
 MODEL_LIGHT_NAME = os.getenv("MODEL_LIGHT_NAME", "gemini-3.8-flash")
 
 # 3-0. 네트워크 및 작업 타임아웃 / 파라미터 상수
