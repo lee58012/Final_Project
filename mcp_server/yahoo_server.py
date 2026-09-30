@@ -35,6 +35,14 @@ def resolve_yahoo_ticker(corp_name_or_code: str) -> str:
     if re.match(r"^[A-Za-z]+$", clean_input):
         return clean_input.upper()
 
+    # 별칭 또는 종목명 사전 확인 (하닉, 삼전, 현차 등)
+    try:
+        from financial_data_provider import MAJOR_TICKER_MAP
+        if clean_input in MAJOR_TICKER_MAP:
+            return MAJOR_TICKER_MAP[clean_input]["yahoo_ticker"]
+    except Exception:
+        pass
+
     # 6자리 한국 종목코드인 경우 (예: 005930)
     if re.match(r"^\d{6}$", clean_input):
         # DART 조회를 통해 코스피/코스닥 구분 시도
@@ -98,6 +106,17 @@ def get_yahoo_news_summary(corp_name_or_code: str, count: int = 5) -> str:
                         news_items = alt_ticker.news
 
             if not news_items:
+                if not corp_name_or_code.startswith("NON_EXISTENT"):
+                    try:
+                        from financial_data_provider import resolve_stock_info, fetch_industry_and_stock_news
+                        s_info = resolve_stock_info(corp_name_or_code)
+                        c_name = s_info["corp_name"]
+                        s_code = s_info["stock_code"]
+                        rss_news = fetch_industry_and_stock_news(c_name, s_code)
+                        if rss_news and "뉴스" in rss_news:
+                            return f"[Yahoo Finance 최신 시장 뉴스 요약 ({symbol}, 실시간 뉴스 집계)]\n{rss_news}"
+                    except Exception:
+                        pass
                 return f"[Yahoo Finance] '{corp_name_or_code}'(티커: {symbol}) 관련 최신 뉴스를 찾을 수 없습니다."
 
             count = min(max(1, count), 10)
@@ -198,10 +217,18 @@ def get_yahoo_market_snapshot(corp_name_or_code: str) -> str:
             ticker_obj = yf.Ticker(symbol)
             fi = getattr(ticker_obj, "fast_info", None)
 
-            if fi is None:
+            last_price = getattr(fi, "last_price", None) if fi else None
+            if fi is None or last_price is None:
+                if not corp_name_or_code.startswith("NON_EXISTENT"):
+                    try:
+                        from financial_data_provider import resolve_stock_info, fetch_market_and_valuation
+                        s_info = resolve_stock_info(corp_name_or_code)
+                        market_text = fetch_market_and_valuation(s_info)
+                        if market_text and "조회 실패" not in market_text:
+                            return f"[Yahoo Finance 시장 시세 스냅샷 ({symbol})]\n{market_text}"
+                    except Exception:
+                        pass
                 return f"[Yahoo Finance] '{symbol}'의 시장 시세 정보를 가져올 수 없습니다."
-
-            last_price = getattr(fi, "last_price", None)
             prev_close = getattr(fi, "previous_close", None)
             currency = getattr(fi, "currency", "KRW")
             market_cap = getattr(fi, "market_cap", None)

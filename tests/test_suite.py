@@ -31,7 +31,7 @@ from mcp_server.yahoo_server import (
     get_yahoo_news_summary,
     get_yahoo_market_snapshot
 )
-from pages.chat_page import extract_financial_data, extract_verdict
+from views.chat_page import extract_financial_data, extract_verdict
 
 
 class TestDBManagerAuth(unittest.TestCase):
@@ -109,6 +109,22 @@ class TestDBManagerAuth(unittest.TestCase):
         self.assertFalse(any(s["session_id"] == sid for s in after_sessions))
         after_messages = db_manager.get_messages(sid)
         self.assertEqual(len(after_messages), 0, "세션 삭제 후 메시지도 삭제되어야 합니다.")
+
+    def test_07_clear_session_messages(self):
+        uid = f"clear_user_{os.urandom(4).hex()}"
+        sid = f"clear_sess_{os.urandom(4).hex()}"
+        db_manager.signup_user(uid, "초기화테스터", "pass1234")
+        db_manager.create_session(uid, sid, "초기화 테스트 세션")
+        db_manager.add_message(sid, uid, "user", "첫 질문")
+        db_manager.add_message(sid, uid, "assistant", "첫 답변")
+        self.assertEqual(len(db_manager.get_messages(sid)), 2)
+
+        # 대화 초기화 실행
+        db_manager.clear_session_messages(sid)
+        self.assertEqual(len(db_manager.get_messages(sid)), 0, "대화 초기화 후 메시지가 0개여야 합니다.")
+        # 세션 자체는 유지되어야 함
+        sessions = db_manager.get_sessions(uid)
+        self.assertTrue(any(s["session_id"] == sid for s in sessions), "대화 초기화 시 세션 자체는 유지되어야 합니다.")
 
 
 class TestFileServer(unittest.TestCase):
@@ -259,6 +275,7 @@ class TestLangGraphNodes(unittest.TestCase):
             "ticker": "삼성전자",
             "context_data": "컨텍스트 데이터",
             "fin_json": '{"corp_name": "삼성전자", "revenue": [100]}',
+            "market_news": "### 📌 기업 주요 현안\n1. [2026-09-30] 삼성전자 실적 발표",
             "bull_analysis": "## 🟢 Bull Case 분석 보고서\n- 핵심 성장 동력: AI 반도체",
             "bear_analysis": "## 🔴 Bear Case 반박 보고서\n- 반박: 사이클 둔화",
             "cro_analysis": "## ⚖️ 최종 투자 심의 위원회 의결서\n- **투자 판정**: [분할 매수]",
@@ -266,7 +283,11 @@ class TestLangGraphNodes(unittest.TestCase):
         }
         res = node_compile_report(state)
         report = res["final_report"]
-        self.assertIn("# [삼성전자] 가상 투자 심의 보고서", report)
+        self.assertTrue(
+            "# [삼성전자] 종합 투자분석 보고서" in report or "# [삼성전자] 가상 투자 심의 보고서" in report,
+            "보고서 메인 타이틀 검증 실패"
+        )
+        self.assertIn("## 📰 최근 주요 시장 뉴스 및 언론 보도 (Yahoo Finance / 실시간 언론사 집계)", report)
         self.assertIn("## 🟢 Bull Case 분석 보고서", report)
         self.assertIn("## 🔴 Bear Case 반박 보고서", report)
         self.assertIn("## ⚖️ 최종 투자 심의 위원회 의결서", report)

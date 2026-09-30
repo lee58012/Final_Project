@@ -89,11 +89,11 @@ class NumberedCanvas(canvas.Canvas):
         self.setStrokeColor(colors.HexColor("#E2E8F0"))
         self.setLineWidth(0.5)
         self.line(40, 800, 555, 800)
-        self.drawString(40, 805, "BULL-GOM | AI HEDGE FUND INVESTMENT COMMITTEE DOSSIER")
+        self.drawString(40, 805, "BULL-GOM | EQUITY RESEARCH COMPREHENSIVE INVESTMENT REPORT")
 
         # 하단 푸터 및 페이지 번호
         self.line(40, 45, 555, 45)
-        self.drawString(40, 32, "Confidential - For Investment Committee Evaluation Only")
+        self.drawString(40, 32, "Confidential - Equity Research Comprehensive Investment Report")
         page_str = f"Page {self._pageNumber} of {page_count}"
         self.drawRightString(555, 32, page_str)
         self.restoreState()
@@ -242,9 +242,13 @@ def markdown_to_pdf_bytes(md_content: str) -> bytes:
         p_text = _format_inline_markdown(stripped)
         story.append(Paragraph(p_text, body_style))
 
-    # 문서 빌드
-    doc.build(story, canvasmaker=NumberedCanvas)
-    return buffer.getvalue()
+    # 문서 빌드 및 버퍼 안전 해제
+    try:
+        doc.build(story, canvasmaker=NumberedCanvas)
+        pdf_bytes = buffer.getvalue()
+        return pdf_bytes
+    finally:
+        buffer.close()
 
 
 def _format_inline_markdown(text: str) -> str:
@@ -260,5 +264,8 @@ def _format_inline_markdown(text: str) -> str:
 
     # 4. 인라인 코드 (`code` -> <b><code>code</code></b>)
     text = re.sub(r"`(.+?)`", r'<font color="#2563EB"><b>\1</b></font>', text)
+
+    # 5. 하이퍼링크 ([text](url) -> <a href="url" color="#2563EB"><u>text</u></a>)
+    text = re.sub(r"\[([^\]]+)\]\((https?://[^\s\)]+)\)", r'<a href="\2" color="#2563EB"><u>\1</u></a>', text)
 
     return text

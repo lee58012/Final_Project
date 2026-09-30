@@ -47,6 +47,7 @@ class CommitteeState(TypedDict):
     ticker: str
     context_data: str
     fin_json: Optional[str]
+    market_news: Optional[str]
     bull_analysis: str
     bear_analysis: str
     cro_analysis: str
@@ -116,7 +117,7 @@ def extract_ticker_from_query(query: str, llm: ChatGoogleGenerativeAI) -> str:
 # ============================================================
 
 def node_fetch_context(state: CommitteeState) -> Dict[str, Any]:
-    """[노드 0] DART 원천 데이터 수집 및 Context Data 생성 노드"""
+    """[노드 0] 종합 원천 데이터 수집(DART, FDR, Naver API, Yahoo Finance) 및 Context Data 생성 노드"""
     ticker = state.get("ticker", "")
     query = state.get("query", "")
 
@@ -127,85 +128,52 @@ def node_fetch_context(state: CommitteeState) -> Dict[str, Any]:
     )
 
     if not ticker:
-        ticker = extract_ticker_from_query(query, llm)
+        raw_target = extract_ticker_from_query(query, llm)
+    else:
+        raw_target = ticker
 
-    # 1. 기업 개요 (DART)
-    overview_text = get_company_overview(ticker)
+    # 금융 데이터 파이프라인(종목명 정규화, DART, FDR, 네이버 증권, 최신 뉴스, 뉴스 인텔리전스)
+    from financial_data_provider import build_comprehensive_context
+    stock_info, context_data = build_comprehensive_context(raw_target or query, llm=llm)
+    resolved_ticker = stock_info.get("corp_name", raw_target or "삼성전자")
 
-    # 2. 최근 재무제표 (DART, 2025 -> 2024 -> 2023 순차 시도)
-    fs_text = get_financial_statements(ticker, year=2024)
+    # 1차: 파이프라인에서 수집된 구조화된 분기별 재무 JSON 직접 사용
+    fin_json = stock_info.get("fin_json")
 
-    # 3. 최근 공시 목록 (DART)
-    disc_text = get_recent_disclosures(ticker, count=5)
-    # 3. 최근 공시 목록 (DART, 최근 7일 이내 우선 필터링)
-    disc_text = get_recent_disclosures(ticker, count=5, days=7)
-
-    # 4. 최근 주요 시장 뉴스 요약 (Yahoo Finance, 7일 이내 시점 태깅)
-    yahoo_news_text = get_yahoo_news_summary(ticker, count=5)
-
-    # 5. 실시간 시장 시세 및 스냅샷 (Yahoo Finance)
-    yahoo_market_text = get_yahoo_market_snapshot(ticker)
-
-    # 타임스탬프 및 7일 유효 범위 설정
-    from datetime import datetime, timedelta
-    today_dt = datetime.today()
-    week_ago_dt = today_dt - timedelta(days=7)
-    time_window_str = f"{week_ago_dt.strftime('%Y-%m-%d')} ~ {today_dt.strftime('%Y-%m-%d')}"
-
-    # 컨텍스트 데이터 종합 (DART 공시/재무 + Yahoo Finance 시장 뉴스/시세)
-    context_data = f"""[분석 기준 시점 및 데이터 유효 범위]
-- 데이터 수집 시점: {today_dt.strftime('%Y-%m-%d %H:%M')}
-- 주식 시장 초단기 모멘텀 기준: 최근 7일(1주일, {time_window_str})
-- [데이터 성격 구분]:
-  1) DART 재무제표: 공식 회계감사 결산 팩트(분기/연간 단위 펀더멘털)
-  2) DART 공시: 최근 7일간 공식 접수된 법적 의무 공시 (신규 부재 시 상태 명시)
-  3) Yahoo Finance: 최근 7일/실시간 언론 보도 및 시장 센티먼트, 실시간 시세
-
-[기업 개요 및 기본 정보 (DART)]
-{overview_text}
-
-[주요 재무제표 팩트 데이터 (DART)]
-{fs_text}
-
-[최근 주요 공시 내역 (DART - 최근 7일 우선 검증)]
-{disc_text}
-
-[최근 주요 시장 뉴스 및 센티먼트 요약 (Yahoo Finance - 최근 7일/실시간 기준)]
-{yahoo_news_text}
-
-[시장 시세 및 스냅샷 (Yahoo Finance)]
-{yahoo_market_text}
-"""
-
-    # 시각화용 재무 JSON 추출 시도
-    fin_json = None
-    try:
-        json_prompt = f"""다음 재무제표 텍스트에서 매출액, 영업이익, 당기순이익의 최근 3개년 수치를 추출하여 JSON 형식으로만 응답하세요.
-반드시 아래 JSON 포맷을 따르고 다른 텍스트는 일절 출력하지 마세요:
+    # 2차 Fallback: 없을 경우 LLM 기반 추출 시도
+    if not fin_json:
+        try:
+            json_prompt = f"""다음 재무 정보 텍스트의 [최근 분기별 실적 추이]에서 이미 공식 분기보고서가 발표/확정된 분기(미발표/추정치(E) 제외)만을 선별하여 분기명, 매출액, 영업이익, 당기순이익 수치를 추출하여 JSON 형식으로만 응답하세요.
+반드시 아래 JSON 포맷을 따르고 마크다운 코드블록이나 부가 설명 없이 순수 JSON만 반환하세요:
 {{
-  "corp_name": "{ticker}",
-  "years": ["2022", "2023", "2024"],
-  "revenue": [숫자1, 숫자2, 숫자3],
-  "operating_profit": [숫자1, 숫자2, 숫자3],
-  "net_profit": [숫자1, 숫자2, 숫자3],
-  "unit": "원 또는 억원"
+  "corp_name": "{resolved_ticker}",
+  "period_type": "quarterly",
+  "periods": ["2025.06", "2025.09", "2025.12", "2026.03", "2026.06"],
+  "years": ["2025.06", "2025.09", "2025.12", "2026.03", "2026.06"],
+  "revenue": [숫자1, 숫자2, 숫자3, 숫자4, 숫자5],
+  "operating_profit": [숫자1, 숫자2, 숫자3, 숫자4, 숫자5],
+  "net_profit": [숫자1, 숫자2, 숫자3, 숫자4, 숫자5],
+  "unit": "억원"
 }}
 
-재무제표 텍스트:
-{fs_text}
+재무 정보 텍스트:
+{context_data}
 """
-        json_resp = llm.invoke(json_prompt)
-        raw_json_text = _clean_response_text(json_resp)
-        match = re.search(r"\{.*\}", raw_json_text, re.DOTALL)
-        if match:
-            fin_json = match.group(0)
-    except Exception:
-        fin_json = None
+            json_resp = llm.invoke(json_prompt)
+            raw_json_text = _clean_response_text(json_resp)
+            match = re.search(r"\{.*\}", raw_json_text, re.DOTALL)
+            if match:
+                fin_json = match.group(0)
+        except Exception:
+            fin_json = None
+
+    market_news = stock_info.get("market_news", "")
 
     return {
-        "ticker": ticker,
+        "ticker": resolved_ticker,
         "context_data": context_data,
-        "fin_json": fin_json
+        "fin_json": fin_json,
+        "market_news": market_news
     }
 
 
@@ -243,7 +211,7 @@ def node_bear_analyst(state: CommitteeState) -> Dict[str, Any]:
 
 
 def node_cro_analyst(state: CommitteeState) -> Dict[str, Any]:
-    """[노드 3] Chief Risk Officer (최고 위험 관리 책임자)"""
+    """[노드 3] Chief Investment Analyst (수석 투자분석가 종합 분석 의견서)"""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=GEMINI_API_KEY
@@ -261,24 +229,38 @@ def node_cro_analyst(state: CommitteeState) -> Dict[str, Any]:
 
 
 def node_compile_report(state: CommitteeState) -> Dict[str, Any]:
-    """[노드 4] 최종 가상 투자 심의 보고서 취합 및 파일 저장 노드"""
+    """[노드 4] 최종 종합 투자분석 보고서 취합 및 파일 저장 노드"""
     ticker = state["ticker"]
     thread_id = state.get("thread_id", "default_thread")
     bull = state["bull_analysis"]
     bear = state["bear_analysis"]
     cro = state["cro_analysis"]
     fin_json = state.get("fin_json")
+    market_news = state.get("market_news", "")
 
     # 전체 보고서 조합
     report_parts = [
-        f"# [{ticker}] 가상 투자 심의 보고서",
-        "",
+        f"# [{ticker}] 종합 투자분석 보고서",
+        ""
+    ]
+
+    # 최신 주요 뉴스 및 언론 보도 섹션 포함
+    if market_news:
+        report_parts.extend([
+            "## 📰 최근 주요 시장 뉴스 및 언론 보도 (Yahoo Finance / 실시간 언론사 집계)",
+            market_news,
+            "",
+            "---",
+            ""
+        ])
+
+    report_parts.extend([
         bull,
         "",
         bear,
         "",
         cro
-    ]
+    ])
 
     # 시각화 데이터 JSON 블록 포함
     if fin_json:
@@ -291,9 +273,9 @@ def node_compile_report(state: CommitteeState) -> Dict[str, Any]:
 
     final_report = "\n".join(report_parts)
 
-    # PDF 투자 심의 보고서 자동 생성 및 저장
+    # PDF 종합 투자분석 보고서 자동 생성 및 저장
     clean_ticker = re.sub(r"[^\w]", "_", ticker)
-    filename = f"{clean_ticker}_가상투자심의보고서.pdf"
+    filename = f"{clean_ticker}_종합투자분석보고서.pdf"
     try:
         write_pdf(filename, final_report, session_id=thread_id)
     except Exception as e:
@@ -331,9 +313,14 @@ def build_committee_graph(checkpointer=None):
 # ============================================================
 # 5. 에이전트 실행 진입점 함수
 # ============================================================
-async def execute_agent(query: str, thread_id: str = "default_thread") -> str:
+async def execute_agent(
+    query: str,
+    thread_id: str = "default_thread",
+    step_callback: Optional[Any] = None
+) -> str:
     """
     LangGraph 3인 투자 심의 위원회 워크플로우를 실행하고 최종 보고서를 반환합니다.
+    step_callback이 주어지면 각 노드 완료 시마다 실시간 진행 단계를 업데이트합니다.
     """
     if not GEMINI_API_KEY:
         raise ValueError(
@@ -351,12 +338,32 @@ async def execute_agent(query: str, thread_id: str = "default_thread") -> str:
         "ticker": "",
         "context_data": "",
         "fin_json": None,
+        "market_news": None,
         "bull_analysis": "",
         "bear_analysis": "",
         "cro_analysis": "",
         "final_report": ""
     }
 
-    # 비동기 실행
-    result = await graph.ainvoke(initial_state)
-    return result.get("final_report", "")
+    if step_callback:
+        step_callback(1, "🔍 DART 기업 개요 및 3개년 회계 결산 팩트 수집")
+
+    final_report = ""
+    async for event in graph.astream(initial_state):
+        for node_name, node_val in event.items():
+            if node_name == "fetch_context":
+                if step_callback:
+                    step_callback(2, "📊 Yahoo Finance 실시간 시세 및 언론사 최신 뉴스 수집")
+            elif node_name == "bull_analyst":
+                if step_callback:
+                    step_callback(3, "🟢 Bull Analyst (롱 포지션) 성장 잠재력/Catalyst 분석")
+            elif node_name == "bear_analyst":
+                if step_callback:
+                    step_callback(4, "🔴 Bear Analyst (숏 포지션) 주가 급락 원인 및 하방 리스크 검증")
+            elif node_name == "cro_analyst":
+                if step_callback:
+                    step_callback(5, "📊 수석 투자분석가(CIO) 종합 분석 의견서 및 A4 PDF 보고서 발행")
+            elif node_name == "compile_report":
+                final_report = node_val.get("final_report", "")
+
+    return final_report

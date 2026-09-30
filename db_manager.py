@@ -1,7 +1,9 @@
 import sqlite3
 import hashlib
+import uuid
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple
+from contextlib import contextmanager
+from typing import List, Dict, Optional, Tuple, Generator
 from config import DB_PATH
 
 _is_db_initialized = False
@@ -10,13 +12,18 @@ def hash_password(password: str) -> str:
     """비밀번호 SHA-256 해시 생성"""
     return hashlib.sha256(password.strip().encode("utf-8")).hexdigest()
 
-def get_connection() -> sqlite3.Connection:
-    """SQLite 커넥션 생성 (WAL 모드 및 외래키 제약조건 활성화)"""
-    conn = sqlite3.connect(DB_PATH)
+@contextmanager
+def get_connection() -> Generator[sqlite3.Connection, None, None]:
+    """SQLite 커넥션 생성 (WAL 모드, 외래키 활성화 및 안전한 close 보장)"""
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL;")
     conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
+
 
 def init_db(force: bool = False) -> None:
     """데이터베이스 및 테이블, 성능 최적화 인덱스 초기화 (1회만 실행)"""
@@ -70,9 +77,20 @@ def init_db(force: bool = False) -> None:
             )
         """)
 
-        # 4. 성능 최적화 인덱스 (대화 목록 및 메시지 조회 속도 대폭 개선)
+        # 4. 로그인 토큰 테이블 (새로고침 시 로그인 유지용)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS login_tokens (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            )
+        """)
+
+        # 5. 성능 최적화 인덱스 (대화 목록 및 메시지 조회 속도 대폭 개선)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_tokens_user_id ON login_tokens(user_id);")
             
         conn.commit()
 
@@ -249,6 +267,62 @@ def delete_last_message(session_id: str) -> None:
             """,
             (session_id,)
         )
+        conn.commit()
+
+def clear_session_messages(session_id: str) -> None:
+    """특정 세션의 모든 메시지 내역 삭제 (대화 초기화)"""
+    init_db()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        conn.commit()
+
+# --- 로그인 토큰 관리 (새로고침 시 로그인 유지) ---
+def create_login_token(user_id: str) -> str:
+    """로그인 토큰 생성 및 DB 저장 (기존 토큰은 삭제 후 새 토큰 발급)"""
+    init_db()
+    token = uuid.uuid4().hex
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM login_tokens WHERE user_id = ?", (user_id,))
+        cursor.execute(
+            "INSERT INTO login_tokens (token, user_id) VALUES (?, ?)",
+            (token, user_id)
+        )
+        conn.commit()
+    return token
+
+def verify_login_token(token: str) -> Optional[Dict]:
+    """토큰으로 사용자 정보 조회 (유효하면 사용자 dict 반환, 무효하면 None)"""
+    init_db()
+    if not token:
+        return None
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT u.user_id, u.username, u.created_at
+            FROM login_tokens t
+            JOIN users u ON t.user_id = u.user_id
+            WHERE t.token = ?
+            """,
+            (token,)
+        )
+        row = cursor.fetchone()
+        if row:
+            return {
+                "user_id": row["user_id"],
+                "username": row["username"],
+                "created_at": row["created_at"]
+            }
+        return None
+
+def delete_login_token(user_id: str) -> None:
+    """사용자의 로그인 토큰 삭제 (로그아웃 시 호출)"""
+    init_db()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM login_tokens WHERE user_id = ?", (user_id,))
         conn.commit()
 
 if __name__ == "__main__":
