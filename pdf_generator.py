@@ -35,6 +35,10 @@ def _init_korean_fonts():
         return
 
     font_candidates = [
+        # Linux (Streamlit Community Cloud / Ubuntu)
+        ("NanumGothic", "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"),
+        ("NanumGothicBold", "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf"),
+        # Windows
         ("Malgun", "C:/Windows/Fonts/malgun.ttf"),
         ("MalgunBold", "C:/Windows/Fonts/malgunbd.ttf"),
         ("NanumGothic", "C:/Windows/Fonts/NanumGothic.ttf"),

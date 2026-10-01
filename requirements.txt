@@ -15,3 +15,4 @@ requests>=2.31.0
 yfinance>=0.2.40
 reportlab>=5.0.0
 markdown>=3.11
+finance-datareader>=0.9.50
